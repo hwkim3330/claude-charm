@@ -198,3 +198,14 @@ legend { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing:
 .swatches button[aria-pressed=true] { border-color: var(--card); box-shadow: 0 0 0 2px var(--ink); }
 .sheet-actions { display: flex; justify-content: flex-end; }
 .primary { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; padding: 9px 22px; border-radius: 999px; cursor: pointer; }
+
+.badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: 2px; }
+.offer {
+  width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px;
+  background: var(--card); border: 1px dashed var(--accent); border-radius: 14px; padding: 10px 14px; font-size: 13.5px; text-align: center;
+}
+.offer-actions { display: inline-flex; gap: 12px; align-items: center; }
+.primary.small { padding: 6px 14px; font-size: 13px; }
+#btn-local { align-self: flex-start; }
+#btn-local:disabled { opacity: .5; }
+progress { width: 100%; accent-color: var(--accent); }

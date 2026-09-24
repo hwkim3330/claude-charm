@@ -2,6 +2,8 @@
 // Pure static page: pixel avatar on a canvas, Web Speech for ears and voice,
 // and the Anthropic SDK called straight from the browser with the user's own key.
 
+import { skills, offlineReply, nanoAvailable, nanoReply, loadLocal, localReply, localLoaded, hasWebGPU, guessMood, profile, tidy, clip, LOCAL_MODEL } from './brains.js';
+
 const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm';
 const $ = (id) => document.getElementById(id);
 
@@ -27,6 +29,8 @@ const cfg = Object.assign({
   speak: true,
   key: '',
   model: 'claude-opus-5',
+  brain: 'auto',
+  localOn: false,
 }, store.get('cfg', {}));
 const saveCfg = () => store.set('cfg', cfg);
 
@@ -44,7 +48,7 @@ const T = {
     hintMic: '지문 센서를 누르고 말하세요 · 화면을 쓰다듬어 주세요',
     hintNoMic: '이 브라우저는 음성 인식을 지원하지 않아요 — 아래에 입력하세요',
     hello: (n) => `안녕! 나는 ${n}. 센서를 눌러서 말 걸어줘.`,
-    needKey: '대화하려면 설정에서 Claude API 키를 넣어줘. 그동안엔 쓰다듬기만 받을게!',
+    needKey: '',
     petted: ['헤헤', '간지러워!', '좋아~', '♥', '더 해줘!'],
     woke: '어… 깼어!',
     listening: 'listening', thinking: 'thinking', speaking: 'speaking', sleeping: 'zzz',
@@ -55,6 +59,17 @@ const T = {
     errOther: (m) => `문제가 생겼어: ${m}`,
     forgot: '다 잊어버렸어. 처음 만난 것 같네!',
     micDenied: '마이크 권한이 필요해.',
+    timerDone: '띵동! 시간 다 됐어!',
+    brain: '두뇌', brainMode: '누가 대답할까', brainNames: { auto: '자동', claude: 'Claude', nano: 'Chrome 내장 AI', local: '무료 AI (브라우저)', offline: 'AI 없이' },
+    brainNow: (n) => `지금 대답하는 두뇌: ${n}`,
+    localBtn: `무료 AI 받기 (${LOCAL_MODEL.label}, 약 ${LOCAL_MODEL.sizeMB}MB 한 번만)`,
+    localHint: '무료 AI를 받으면 더 똑똑해져요',
+    localLoading: '새 두뇌를 받는 중… 조금만 기다려줘!',
+    localReady: '짜잔! 이제 인터넷 없이도 내 머리로 생각할 수 있어.',
+    localFail: '무료 AI를 못 불러왔어. 대신 AI 없이 대답할게.',
+    downloading: '받는 중',
+    noWebGPU: '이 브라우저는 WebGPU가 없어서 무료 AI를 못 돌려요. AI 없이도 대화는 돼요.',
+    offer: `API 키가 없어도 돼요 — 무료 AI를 켤까요? (약 ${LOCAL_MODEL.sizeMB}MB)`, offerYes: '켜기', offerNo: '나중에',
     persona0: '호기심 많고 다정하며 조금 장난스럽다. 주인을 잘 챙기고, 작은 일에도 기뻐한다.',
     foot: '비공식 팬 프로젝트 · Anthropic, Meta 와 무관합니다 · Meta <b>Muse Charm</b> 에서 영감을 받았습니다<br>대화는 브라우저에서 직접 Claude API 로 갑니다 · <a href="https://github.com/hwkim3330/claude-charm">GitHub</a>',
   },
@@ -66,7 +81,7 @@ const T = {
     hintMic: 'Hold the fingerprint sensor and talk · stroke the screen',
     hintNoMic: 'This browser has no speech recognition — type below instead',
     hello: (n) => `Hi! I'm ${n}. Tap the sensor to talk to me.`,
-    needKey: 'Add a Claude API key in settings so we can talk. Head pats work without one!',
+    needKey: '',
     petted: ['hehe', 'that tickles!', 'nice~', '♥', 'more!'],
     woke: 'huh… I\'m up!',
     listening: 'listening', thinking: 'thinking', speaking: 'speaking', sleeping: 'zzz',
@@ -77,6 +92,17 @@ const T = {
     errOther: (m) => `Something went wrong: ${m}`,
     forgot: 'All forgotten. Nice to meet you!',
     micDenied: 'I need microphone permission.',
+    timerDone: "Ding ding! Time's up!",
+    brain: 'Brain', brainMode: 'Who answers', brainNames: { auto: 'Auto', claude: 'Claude', nano: 'Chrome built-in AI', local: 'Free AI (in browser)', offline: 'No AI' },
+    brainNow: (n) => `Answering now: ${n}`,
+    localBtn: `Get the free AI (${LOCAL_MODEL.label}, ~${LOCAL_MODEL.sizeMB}MB once)`,
+    localHint: 'the free AI makes me smarter',
+    localLoading: 'Downloading a new brain… hang on!',
+    localReady: 'Ta-da! Now I can think on my own, no internet needed.',
+    localFail: "Couldn't load the free AI. I'll answer without AI instead.",
+    downloading: 'Downloading',
+    noWebGPU: "This browser has no WebGPU, so the free AI can't run here. Chatting still works without AI.",
+    offer: `No API key needed — turn on the free AI? (~${LOCAL_MODEL.sizeMB}MB)`, offerYes: 'Turn on', offerNo: 'Later',
     persona0: 'Curious, warm and a little playful. Looks out for their owner and delights in small things.',
     foot: 'Unofficial fan project · not affiliated with Anthropic or Meta · inspired by Meta\'s <b>Muse Charm</b><br>Chats go straight from your browser to the Claude API · <a href="https://github.com/hwkim3330/claude-charm">GitHub</a>',
   },
@@ -298,6 +324,44 @@ function streamFor(c, messages) {
   return c.messages.stream(params);
 }
 
+/* ------------------------------------------------------------------ brains */
+
+let nanoState = 'no';
+nanoAvailable().then((v) => { nanoState = v; renderBrainInfo(); });
+
+// Which brain answers now. 'auto' picks the best one this browser can use right now.
+function activeBrain() {
+  const ok = { claude: !!cfg.key, nano: nanoState === 'available', local: localLoaded(), offline: true };
+  if (cfg.brain !== 'auto' && ok[cfg.brain]) return cfg.brain;
+  return ok.claude ? 'claude' : ok.local ? 'local' : ok.nano ? 'nano' : 'offline';
+}
+
+// Small models get a short prompt with a short list of moods.
+const SMALL_MOODS = ['happy', 'excited', 'love', 'shy', 'sad', 'surprised', 'confused', 'thinking', 'sleepy', 'proud', 'playful', 'dance'];
+function smallPrompt() {
+  const lang = LANG_NAME[cfg.lang] || 'Korean';
+  if (cfg.lang.startsWith('ko')) {
+    return `너는 '${cfg.name}'야. 사용자의 열쇠고리 속에 사는 작고 귀여운 친구. ${cfg.persona || T.ko.persona0} ` +
+      `항상 반말로, 한두 문장으로 짧고 따뜻하게 대답해. 이모지와 목록은 쓰지 마. ` +
+      `대답 맨 앞에 기분 태그를 하나 붙여: ${SMALL_MOODS.map((m) => `[${m}]`).join(' ')}. 상대 기분에 맞는 태그를 골라.` +
+      (profile().userName ? ` 사용자 이름은 ${profile().userName}야.` : '') + ' (Korean)';
+  }
+  return `You are ${cfg.name}, a tiny cute friend living in a keychain. ${cfg.persona || T[uiLang].persona0} ` +
+    `Reply in ${lang}, in one or two short friendly sentences. No emoji, no lists. ` +
+    `Start with one mood tag: ${SMALL_MOODS.map((m) => `[${m}]`).join(' ')}.` +
+    (profile().userName ? ` The user's name is ${profile().userName}.` : '');
+}
+
+const skillCtx = {
+  timer(sec) {
+    setTimeout(() => {
+      poke(); CH.dance(8); setMood('excited', 9);
+      say(t.timerDone, { hold: 8 }); speak(t.timerDone); mimeTalk(2000);
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+    }, sec * 1000);
+  },
+};
+
 let busy = false;
 async function send(text) {
   text = text.trim();
@@ -306,22 +370,13 @@ async function send(text) {
   hush();
   addLog('user', text);
 
-  if (!cfg.key) {
-    setMood('confused', 4);
-    say(t.needKey, { hold: 7 });
-    speak(t.needKey);
-    mimeTalk(2500);
-    return;
-  }
-
   busy = true;
   $('talk').querySelector('button').disabled = true;
-  history.push({ role: 'user', content: text });
   setMood('thinking');
   setStatus(t.thinking);
   say('', { hold: 0 });
 
-  let raw = '', shown = '', spokenUpTo = 0, moodSet = false;
+  let shown = '', spokenUpTo = 0, moodSet = false;
   const flushSpeech = (final) => {
     // speak whole sentences as soon as they're complete
     const rest = shown.slice(spokenUpTo);
@@ -333,53 +388,95 @@ async function send(text) {
     })();
     if (m > 0) { speak(rest.slice(0, m)); spokenUpTo += m; }
   };
+  const applyTag = (tag) => {
+    tag = (tag || '').toLowerCase();
+    if (tag === 'dance') { CH.dance(8); setMood('happy', 10); } else setMood(MOODS.includes(tag) ? tag : 'neutral', 12);
+  };
+  // Every brain reports its whole text so far; this strips the leading tag and shows / speaks the rest.
+  const onText = (full) => {
+    let raw = full;
+    if (!moodSet) {
+      const m = raw.match(/^\s*\[(\w+)\]\s*/);
+      if (m) { moodSet = true; applyTag(m[1]); }
+      else if (raw.length > 16 || !/^\s*\[/.test(raw)) { moodSet = true; setMood(guessMood(raw), 10); }
+      else return;
+    }
+    shown = tidy(raw.replace(/\[(\w+)\]\s*/g, '').replace(/<\/?think>/g, '')).trim();
+    if (!shown) return;
+    say(shown, { hold: 0 });
+    setStatus(t.speaking);
+    mimeTalk(1200);
+    flushSpeech(false);
+  };
+  const finish = (reply) => {
+    flushSpeech(true);
+    history.push({ role: 'user', content: text }, { role: 'assistant', content: reply || '…' });
+    saveHistory();
+    addLog('assistant', reply);
+    say(reply, { hold: Math.min(14, 4 + reply.length / 18) });
+  };
 
+  const brain = activeBrain();
   try {
+    // 1) things with one right answer never go to a model
+    const sk = await skills(text, cfg.lang, skillCtx);
+    if (sk) {
+      await new Promise((r) => setTimeout(r, 250));
+      onText(`[${sk.mood}] ${sk.text}`);
+      return finish(shown);
+    }
+    // 2) chat. The hand-written companion answers what it recognises (in character, instantly); a small model
+    //    only takes what it doesn't (open questions), and is kept to two sentences.
+    const r = brain === 'claude' ? null : offlineReply(text, cfg.lang, cfg.name);
+    if (r && (brain === 'offline' || !r.fallback)) {
+      await new Promise((res) => setTimeout(res, 350 + Math.random() * 400));
+      onText(`[${r.mood}] ${r.text}`);
+      return finish(shown);
+    }
+    if (brain === 'local' || brain === 'nano') {
+      let full = '';
+      const cap = (f) => { full = f; onText(f.replace(/^(\s*\[\w+\]\s*)?([\s\S]*)$/, (m, tag, rest) => (tag || '') + clip(rest))); };
+      await (brain === 'local' ? localReply : nanoReply)(smallPrompt(), history, text, cap);
+      const tagm = full.match(/^\s*\[\w+\]\s*/);
+      shown = tidy(clip(full.slice(tagm ? tagm[0].length : 0).replace(/\[(\w+)\]\s*/g, ''), 2, true)).trim();
+      if (!shown) onText('[confused] ' + (uiLang === 'ko' ? '음… 뭐라고 할지 모르겠어.' : 'Hmm, I lost my words.'));
+      return finish(shown);
+    }
+    // claude
     const c = await getClient();
-    const stream = streamFor(c, history.slice(-20));
+    const stream = streamFor(c, [...history.slice(-20), { role: 'user', content: text }]);
+    let raw = '';
     for await (const ev of stream) {
       if (ev.type !== 'content_block_delta' || ev.delta.type !== 'text_delta') continue;
       raw += ev.delta.text;
-      if (!moodSet) {
-        const m = raw.match(/^\s*\[(\w+)\]\s*/);
-        if (m) {
-          moodSet = true; raw = raw.slice(m[0].length);
-          const tag = m[1].toLowerCase();
-          if (tag === 'dance') { CH.dance(8); setMood('happy', 10); } else setMood(MOODS.includes(tag) ? tag : 'neutral', 12);
-        } else if (raw.length > 16 || !/^\s*\[/.test(raw)) { moodSet = true; setMood('neutral'); }
-        else continue;
-      }
-      shown = raw.replace(/\[(\w+)\]\s*/g, '');
-      say(shown, { hold: 0 });
-      setStatus(t.speaking);
-      mimeTalk(1200);
-      flushSpeech(false);
+      onText(raw);
     }
     const msg = await stream.finalMessage();
     if (msg.stop_reason === 'refusal' && !shown) {
       shown = t.errRefusal;
       setMood('nervous', 4);
-      say(shown, { hold: 6 });
     }
-    flushSpeech(true);
-    history.push({ role: 'assistant', content: shown || '…' });
-    saveHistory();
-    addLog('assistant', shown);
-    say(shown, { hold: Math.min(14, 4 + shown.length / 18) });
+    finish(shown);
   } catch (err) {
-    history.pop(); // drop the unanswered user turn so history stays alternating
-    const E = Anthropic || {};
-    let line;
-    if (E.AuthenticationError && err instanceof E.AuthenticationError) line = t.errKey;
-    else if (E.PermissionDeniedError && err instanceof E.PermissionDeniedError) line = t.errKey;
-    else if (E.RateLimitError && err instanceof E.RateLimitError) line = t.errRate;
-    else if (E.APIConnectionError && err instanceof E.APIConnectionError) line = t.errNet;
-    else if (!Anthropic) line = t.errNet; // the SDK itself failed to load
-    else line = t.errOther(err?.error?.error?.message || err?.message || String(err));
     console.error(err);
-    setMood('sad', 5);
-    say(line, { hold: 8 });
-    speak(line);
+    let line;
+    if (brain === 'claude') {
+      const E = Anthropic || {};
+      if (E.AuthenticationError && err instanceof E.AuthenticationError) line = t.errKey;
+      else if (E.PermissionDeniedError && err instanceof E.PermissionDeniedError) line = t.errKey;
+      else if (E.RateLimitError && err instanceof E.RateLimitError) line = t.errRate;
+      else if (E.APIConnectionError && err instanceof E.APIConnectionError) line = t.errNet;
+      else if (!Anthropic) line = t.errNet; // the SDK itself failed to load
+      else line = t.errOther(err?.error?.error?.message || err?.message || String(err));
+    } else line = t.errOther(err?.message || String(err));
+    // never leave the user without an answer: fall back to the offline brain
+    const r = offlineReply(text, cfg.lang, cfg.name);
+    setMood('nervous', 3);
+    say(line, { hold: 3 });
+    await new Promise((res) => setTimeout(res, 1800));
+    shown = ''; moodSet = false;
+    onText(`[${r.mood}] ${r.text}`);
+    finish(shown);
   } finally {
     busy = false;
     $('talk').querySelector('button').disabled = false;
@@ -387,6 +484,45 @@ async function send(text) {
   }
 }
 
+/* ------------------------------------------------------- free local model UI */
+
+function fmtMB(b) { return Math.round(b / 1e6) + 'MB'; }
+async function enableLocal() {
+  if (!hasWebGPU()) { $('brain-info').textContent = t.noWebGPU; return; }
+  const btn = $('btn-local'), bar = $('local-bar');
+  btn.disabled = true; bar.hidden = false; $('offer').hidden = true;
+  setMood('determined');
+  say(t.localLoading, { hold: 0 });
+  try {
+    await loadLocal((p) => {
+      const k = p.total ? p.loaded / p.total : 0;
+      bar.value = k;
+      const txt = `${t.downloading} ${fmtMB(p.loaded)} / ${fmtMB(p.total)}`;
+      $('brain-info').textContent = txt;
+      setStatus(Math.round(k * 100) + '%');
+    });
+    cfg.localOn = true; saveCfg();
+    setStatus('');
+    setMood('idea', 4);
+    say(t.localReady, { hold: 6 }); speak(t.localReady); mimeTalk(1800);
+  } catch (e) {
+    console.error(e);
+    cfg.localOn = false; saveCfg();
+    setMood('sad', 4);
+    say(t.localFail, { hold: 6 });
+    $('brain-info').textContent = t.localFail + ' (' + e.message + ')';
+  } finally {
+    btn.disabled = false; bar.hidden = true; renderBrainInfo();
+  }
+}
+
+function renderBrainInfo() {
+  const el = $('brain-info'); if (!el) return;
+  const b = activeBrain();
+  el.textContent = t.brainNow(t.brainNames[b]) + (b === 'offline' && hasWebGPU() && !localLoaded() ? ' · ' + t.localHint : '');
+  $('btn-local').hidden = localLoaded() || !hasWebGPU();
+  $('brain-badge').textContent = t.brainNames[b];
+}
 $('talk').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('text');
@@ -461,6 +597,16 @@ bindField('s-pitch', 'pitch', Number);
 bindField('s-speak', 'speak', Boolean, 'change');
 bindField('s-key', 'key', (v) => v.trim());
 bindField('s-model', 'model', String, 'change');
+bindField('s-brain', 'brain', String, 'change');
+for (const [v, n] of Object.entries(t.brainNames)) $('s-brain').add(new Option(n, v));
+$('s-brain').value = cfg.brain;
+$('s-brain').addEventListener('change', renderBrainInfo);
+$('s-key').addEventListener('input', renderBrainInfo);
+$('btn-local').textContent = t.localBtn;
+$('btn-local').addEventListener('click', enableLocal);
+$('offer-text').textContent = t.offer; $('offer-yes').textContent = t.offerYes; $('offer-no').textContent = t.offerNo;
+$('offer-yes').addEventListener('click', enableLocal);
+$('offer-no').addEventListener('click', () => { $('offer').hidden = true; store.set('offerDismissed', true); });
 $('s-persona').placeholder = t.persona0;
 
 $('btn-settings').addEventListener('click', () => { renderPickers(); dlg.showModal(); });
@@ -480,4 +626,8 @@ $('hint').textContent = SR ? t.hintMic : t.hintNoMic;
 CH.setHat(cfg.hat); CH.setColor(cfg.color); CH.start();
 setInterval(() => $('screen').classList.toggle('night', CH.isNight()), 1000);
 CH.wait().then(() => setTimeout(() => { setMood('excited', 3); say(t.hello(cfg.name), { hold: 6 }); }, 500));
+renderBrainInfo();
+// the free model was on last time: its weights are cached, so bring it back quietly
+if (cfg.localOn && hasWebGPU()) setTimeout(() => loadLocal().then(renderBrainInfo).catch(() => {}), 1500);
+else if (!cfg.key && hasWebGPU() && !store.get('offerDismissed', false)) setTimeout(() => { $('offer').hidden = false; }, 3500);
 poke();

@@ -16,7 +16,7 @@
 <body>
 <main class="stage">
   <header class="top">
-    <h1>Claude Charm</h1>
+    <h1>Claude Charm <span class="badge" id="brain-badge"></span></h1>
     <button class="icon-btn" id="btn-settings" aria-label="설정" data-i18n-aria="settings">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.58-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.65.07.97l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.22.08.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65Z"/></svg>
     </button>
@@ -40,6 +40,10 @@
   </section>
 
   <p class="hint" id="hint"></p>
+  <div class="offer" id="offer" hidden>
+    <span id="offer-text"></span>
+    <span class="offer-actions"><button type="button" class="primary small" id="offer-yes"></button><button type="button" class="link" id="offer-no"></button></span>
+  </div>
 
   <form class="talk" id="talk" autocomplete="off">
     <input id="text" type="text" enterkeyhint="send">
@@ -85,6 +89,14 @@
       <label><span data-i18n="rate">빠르기</span><input id="s-rate" type="range" min="0.6" max="1.6" step="0.05"></label>
       <label><span data-i18n="pitch">높낮이</span><input id="s-pitch" type="range" min="0.5" max="2" step="0.05"></label>
       <label class="check"><input id="s-speak" type="checkbox"><span data-i18n="speakAloud">소리 내어 대답</span></label>
+    </fieldset>
+
+    <fieldset>
+      <legend data-i18n="brain">두뇌</legend>
+      <label><span data-i18n="brainMode">누가 대답할까</span><select id="s-brain"></select></label>
+      <p class="note" id="brain-info"></p>
+      <button type="button" class="primary" id="btn-local"></button>
+      <progress id="local-bar" max="1" value="0" hidden></progress>
     </fieldset>
 
     <fieldset>

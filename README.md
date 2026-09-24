@@ -37,21 +37,33 @@ and a fingerprint sensor in the corner that starts the conversation.
   *full* → *mid* (bleed capped, no pigment texture) → *lite* (flat washes and ink) and 12 → 8 drawings a second,
   based on measured frame times. The choice is remembered. `?res=` sets the screen resolution, and `?night=1|0` forces night or day.
 
-## How it talks to Claude
+## Brains: works with no key at all
 
-There is no server. The page loads the official
-[Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript) from jsDelivr
-and calls `api.anthropic.com` directly from your browser with **your own API key**. The key is kept only
-in this browser's `localStorage`.
+Settings → **Brain**. *Auto* picks the best one available:
 
-- The default model is Claude Opus 5. Sonnet 5 and Haiku 4.5 can be picked in settings.
-- It uses low effort so voice replies start quickly.
-- On Opus 5, server-side refusal fallback (`fallbacks: "default"`) is turned on.
+| brain | needs | good at |
+|---|---|---|
+| **Claude** | your Anthropic API key | everything; the best by far |
+| **Free AI (in browser)** | WebGPU, one ~800 MB download (cached) | open questions, offline once downloaded |
+| **Chrome built-in AI** | a Chrome with the Prompt API (Gemini Nano) | open questions, no download from us |
+| **No AI** | nothing | chatting in character, games, remembering you |
 
-Because the key sits in the page, only use it on a device you trust. For a shared deployment you'd put a small
-proxy in front of the API instead.
+- **Skills never go to a model.** The time and date, timers ("5분 뒤에 알려줘"), weather (Open-Meteo, keyless),
+  arithmetic, dice, coin flips and rock-paper-scissors are answered in code, whatever the brain. They're always right.
+- **The no-AI companion is hand-written.** It covers greetings, feelings, jokes and riddles, food ideas, dancing, singing
+  and fortunes, and it learns your name ("내 이름은 ○○야"). With a small model on, it still answers the things it
+  recognises, because it does those better, and the model only takes open questions, cut to two sentences.
+- **The free model is Gemma 3 1B** (`onnx-community/gemma-3-1b-it-ONNX`, transformers.js on WebGPU, in a worker so Clawd
+  keeps painting). I measured it before choosing. It gave natural Korean and sensible mood tags at ~17 tok/s on a
+  desktop GPU. Qwen3.5-0.8B loaded but gave broken Korean at 0.4 tok/s. Be honest with yourself about a 1B model: it's
+  chatty, not knowledgeable, and it gets facts wrong. Use Claude for real questions.
 
-Without a key the companion still blinks, wanders, sleeps and enjoys head pats. It just can't chat.
+### Claude
+
+With a key, the page loads the official [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript)
+from jsDelivr and calls `api.anthropic.com` directly from your browser. The key stays in this browser's
+`localStorage`. The default is Claude Opus 5 at low effort for quick voice replies, with server-side refusal fallback
+(`fallbacks: "default"`) turned on. Only use your key on a device you trust.
 
 ## Run locally
 
