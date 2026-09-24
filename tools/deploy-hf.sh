@@ -11,7 +11,8 @@ space = sys.argv[1]
 api = HfApi()
 api.create_repo(space, repo_type="space", space_sdk="static", exist_ok=True)
 api.upload_folder(folder_path=".", repo_id=space, repo_type="space",
-                  allow_patterns=["index.html", "app.js", "style.css", "README.md", "LICENSE"],
+                  allow_patterns=["index.html", "app.js", "charm-scene.js", "style.css", "manifest.webmanifest",
+                                  "*.png", "README.md", "LICENSE", "vendor/**"],
                   commit_message="Deploy Claude Charm")
 print(f"https://huggingface.co/spaces/{space}")
 PY

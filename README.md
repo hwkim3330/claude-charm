@@ -19,14 +19,23 @@ and a fingerprint sensor in the corner that starts the conversation.
 
 ## What it does
 
-- **Tap or hold the sensor to talk.** A short tap listens until you pause. Holding it is push-to-talk. This uses the browser's
-  speech recognition (Chrome, Edge and Safari). Other browsers can use the text box instead.
-- **Replies are spoken aloud** sentence by sentence as they stream in, and the avatar's mouth moves with them.
-- **The face follows the reply.** Each answer starts with a mood tag (`[happy]`, `[curious]`,
-  `[thinking]`, …) that sets the expression and is not read out.
-- **It's a pet as well.** Stroke the screen for hearts. Leave it alone for a minute and it dozes off.
-- **Customisation:** name, three avatars (critter, spark, mochi), eight colours, personality,
-  language (ko/en/ja), voice, speed and pitch.
+- **Clawd lives on the screen, painted in watercolour and ink.** The character, its 31 emotions, 18 hats, emotes
+  and dances come from [Claude Animation Base](https://github.com/JohnHeibel/ClaudeAnimationBase) (MIT, vendored in
+  [`vendor/claude-animation-base/`](vendor/claude-animation-base/)). That is the kit behind the Clawd music video
+  [*I'm Upping My P(doom)*](https://github.com/JohnHeibel/PDoomVideo), and it paints with p5.js + p5.brush. That kit renders
+  video offline. Here the same `drawWorld(t)` is repainted live, 12 drawings a second ("on twos", the rate its linework
+  boils at). Mood changes go through the kit's acted `emotions()` timeline: a squint, a swap and a squash-stretch take.
+- **Tap or hold the fingerprint sensor to talk.** A tap listens until you pause, and holding it is push-to-talk.
+  Speech recognition works in Chrome, Edge and Safari. Other browsers can use the text box instead.
+- **Replies are spoken aloud** sentence by sentence as they stream in, and the mouth follows the voice.
+- **The reply picks the face.** Each answer starts with one of the kit's emotion names (`[starstruck]`,
+  `[thinking]`, `[shy]`, …) or `[dance]`, which drives Clawd's face, colour and body and is not read out.
+- **It's a pet, too.** Stroke the screen for hearts, and keep going and it dances. Leave it alone and it gets bored, then
+  dozes off under a night sky. The screen also turns to night after 21:00.
+- **Customise:** name, hat, colour, personality, language (ko/en/ja), voice, speed and pitch.
+- **It adapts to the device.** p5.brush's watercolour fills are almost the whole cost of a frame, so quality steps between
+  *full* → *mid* (bleed capped, no pigment texture) → *lite* (flat washes and ink) and 12 → 8 drawings a second,
+  based on measured frame times. The choice is remembered. `?res=` sets the screen resolution, and `?night=1|0` forces night or day.
 
 ## How it talks to Claude
 
@@ -51,6 +60,12 @@ python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
 Speech recognition needs `https://` or `localhost`.
+
+## Credits
+
+- Clawd painting, emotions, hats, emotes and dances: [JohnHeibel/ClaudeAnimationBase](https://github.com/JohnHeibel/ClaudeAnimationBase),
+  MIT, © 2026 John Heibel. See [`vendor/claude-animation-base/`](vendor/claude-animation-base/) for what was changed (two marked lines).
+- Brushes: [p5.brush](https://github.com/acamposuribe/p5.brush) on [p5.js](https://p5js.org), both loaded from jsDelivr.
 
 ## Not affiliated
 

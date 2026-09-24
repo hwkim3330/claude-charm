@@ -17,7 +17,7 @@ const uiLang = (navigator.language || 'en').toLowerCase().startsWith('ko') ? 'ko
 
 const cfg = Object.assign({
   name: uiLang === 'ko' ? '클로' : 'Clo',
-  skin: 'crab',
+  hat: 'none',
   color: '#d97757',
   persona: '',
   lang: uiLang === 'ko' ? 'ko-KR' : 'en-US',
@@ -37,7 +37,7 @@ const saveHistory = () => store.set('history', history.slice(-30));
 
 const T = {
   ko: {
-    settings: '설정', log: '대화 기록', forget: '기억 지우기', companion: '친구', name: '이름', avatar: '모습', color: '색',
+    settings: '설정', log: '대화 기록', forget: '기억 지우기', companion: '친구', name: '이름', avatar: '모자', color: '색',
     persona: '성격', voice: '목소리', lang: '언어', voiceName: '음성', rate: '빠르기', pitch: '높낮이', speakAloud: '소리 내어 대답',
     key: 'API 키', keyNote: '키는 이 브라우저(localStorage)에만 저장되고 api.anthropic.com 으로 직접 보내집니다.', model: '모델', done: '완료',
     placeholder: (n) => `${n}에게 말하기…`,
@@ -59,7 +59,7 @@ const T = {
     foot: '비공식 팬 프로젝트 · Anthropic, Meta 와 무관합니다 · Meta <b>Muse Charm</b> 에서 영감을 받았습니다<br>대화는 브라우저에서 직접 Claude API 로 갑니다 · <a href="https://github.com/hwkim3330/claude-charm">GitHub</a>',
   },
   en: {
-    settings: 'Settings', log: 'Conversation', forget: 'Forget everything', companion: 'Companion', name: 'Name', avatar: 'Look', color: 'Colour',
+    settings: 'Settings', log: 'Conversation', forget: 'Forget everything', companion: 'Companion', name: 'Name', avatar: 'Hat', color: 'Colour',
     persona: 'Personality', voice: 'Voice', lang: 'Language', voiceName: 'Voice', rate: 'Speed', pitch: 'Pitch', speakAloud: 'Speak replies aloud',
     key: 'API key', keyNote: 'Stored only in this browser (localStorage) and sent directly to api.anthropic.com.', model: 'Model', done: 'Done',
     placeholder: (n) => `Say something to ${n}…`,
@@ -88,235 +88,27 @@ document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t[el
 document.querySelectorAll('[data-i18n-html]').forEach((el) => { el.innerHTML = t[el.dataset.i18nHtml]; });
 document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t[el.dataset.i18nAria]); });
 
-/* ------------------------------------------------------------ pixel avatar */
+/* ------------------------------------------------------- the painted screen */
 
-const G = 40;                 // logical pixel grid
-const canvas = $('face');
-const ctx = canvas.getContext('2d');
-const PX = canvas.width / G;
-const EYE = '#1d1916';
-const CHEEK = '#f29a9a';
+// charm-scene.js paints Clawd with the vendored Claude Animation Base and exposes window.CHARM.
+const CH = window.CHARM;
+const A = { speaking: false };   // true while the voice (or a muted stand-in) is running
 
-// shared animation state
-const A = {
-  t: 0,
-  mood: 'calm',          // calm happy curious thinking sad surprised sleepy listening
-  moodUntil: 0,
-  asleep: false,
-  talk: 0,               // mouth openness 0..1
-  speaking: false,
-  lookX: 0, lookY: 0, lookTX: 0, lookTY: 0,
-  x: 0, tx: 0,           // wander
-  blinkAt: 2,
-  blush: 0,
-  wave: 0,
-  particles: [],
-};
+// The mouth follows a jittery envelope while the voice runs; the scene reads it on every drawing.
+let talkV = 0;
+setInterval(() => {
+  const s = performance.now() / 1000;
+  const target = A.speaking ? 0.25 + 0.75 * Math.abs(Math.sin(s * 13) * Math.sin(s * 7.3 + 1)) : 0;
+  talkV += (target - talkV) * 0.6;
+  CH.talk(talkV < 0.03 ? 0 : talkV);
+}, 1000 / 24);
 
-function shade(hex, f) {
-  const n = parseInt(hex.slice(1), 16);
-  const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f))));
-  return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
-}
-
-function makePainter(c2d, scale) {
-  return {
-    rect(x, y, w, h, col) { c2d.fillStyle = col; c2d.fillRect(Math.round(x) * scale, Math.round(y) * scale, w * scale, h * scale); },
-    dot(x, y, col) { this.rect(x, y, 1, 1, col); },
-  };
-}
-
-// Eyes shared by every skin. (x, y) is the top-left of the left eye; gap is the distance to the right eye.
-function drawEyes(p, x, y, gap, s) {
-  const mood = s.asleep ? 'asleep' : s.mood;
-  const lx = Math.round(s.lookX), ly = Math.round(s.lookY);
-  const blink = s.blinking && mood !== 'asleep' && mood !== 'happy';
-  for (const ex of [x + lx, x + gap + lx]) {
-    const ey = y + ly;
-    if (blink) { p.rect(ex, ey + 2, 2, 1, EYE); continue; }
-    switch (mood) {
-      case 'asleep': p.rect(ex - 1, ey + 2, 3, 1, EYE); break;
-      case 'sleepy': p.rect(ex, ey + 1, 2, 2, EYE); p.rect(ex - 1, ey + 1, 3, 1, s.body); break;
-      case 'happy': p.dot(ex - 1, ey + 2, EYE); p.rect(ex, ey + 1, 2, 1, EYE); p.dot(ex + 2, ey + 2, EYE); break;
-      case 'surprised': p.rect(ex - 1, ey - 1, 3, 4, EYE); p.dot(ex, ey, '#fff'); break;
-      case 'sad': p.rect(ex, ey + 1, 2, 2, EYE); break;
-      case 'thinking': p.rect(ex + 1, ey - 1, 2, 2, EYE); break;
-      case 'listening': case 'curious': p.rect(ex, ey - 1, 2, 4, EYE); p.dot(ex, ey - 1, '#fff'); break;
-      default: p.rect(ex, ey, 2, 3, EYE);
-    }
-  }
-  if (mood === 'sad') { p.dot(x - 1, y - 1, EYE); p.dot(x + gap + 2, y - 1, EYE); }
-  if (s.blush > 0.05 || mood === 'happy') {
-    p.rect(x - 2, y + 4, 2, 1, CHEEK); p.rect(x + gap + 2, y + 4, 2, 1, CHEEK);
-  }
-}
-
-function drawMouth(p, cx, y, s) {
-  if (s.asleep) return;
-  if (s.talk > 0.12) {
-    const h = s.talk > 0.6 ? 2 : 1;
-    const w = s.talk > 0.35 ? 3 : 2;
-    p.rect(cx - Math.floor(w / 2), y, w, h, EYE);
-  } else if (s.mood === 'happy' || s.blush > 0.05) {
-    p.dot(cx - 2, y, EYE); p.rect(cx - 1, y + 1, 2, 1, EYE); p.dot(cx + 1, y, EYE);
-  } else if (s.mood === 'surprised') {
-    p.rect(cx - 1, y, 2, 2, EYE);
-  } else if (s.mood === 'sad') {
-    p.rect(cx - 1, y, 2, 1, EYE); p.dot(cx - 2, y + 1, EYE); p.dot(cx + 1, y + 1, EYE);
-  }
-}
-
-const SKINS = {
-  // the little coral critter: block body, stubby arms, four legs
-  crab(p, s) {
-    const cx = 20 + Math.round(s.x);
-    const bob = s.asleep ? 0 : Math.round(Math.sin(s.t * 3) * 0.6 + 0.4);
-    const top = 17 + bob;
-    const body = s.body, dark = shade(body, -0.28), lite = shade(body, 0.18);
-    // legs (walk cycle while wandering)
-    const walking = Math.abs(s.tx - s.x) > 0.3;
-    const step = walking ? (Math.floor(s.t * 8) % 2) : 0;
-    [-6, -3, 2, 5].forEach((lx, i) => {
-      const lift = walking && (i % 2 === step) ? 1 : 0;
-      p.rect(cx + lx, top + 11 - lift + (s.asleep ? -1 : 0), 1, 3 - (s.asleep ? 1 : 0), dark);
-    });
-    // body
-    p.rect(cx - 7, top, 14, 11, body);
-    p.rect(cx - 7, top, 14, 1, lite);
-    p.rect(cx - 7, top + 10, 14, 1, dark);
-    // arms — waving raises one
-    const wave = s.wave > 0 ? Math.round(Math.sin(s.t * 18)) : 0;
-    p.rect(cx - 10, top + 4, 3, 3, body);
-    p.rect(cx + 7, top + 4 - (s.wave > 0 ? 3 + wave : 0), 3, 3, body);
-    drawEyes(p, cx - 4, top + 3, 6, s);
-    drawMouth(p, cx, top + 8, s);
-  },
-
-  // a starburst with a face — rays spin while thinking
-  spark(p, s) {
-    const cx = 20 + Math.round(s.x) + 0.5, cy = 23.5 + (s.asleep ? 1 : Math.round(Math.sin(s.t * 2.4) * 0.6));
-    const body = s.body, dark = shade(body, -0.22);
-    const spin = s.mood === 'thinking' ? s.t * 2.2 : s.t * 0.15;
-    const N = 11;
-    for (let k = 0; k < N; k++) {
-      const a = spin + (k / N) * Math.PI * 2;
-      const len = 11 + ((k * 7) % 4) - (s.asleep ? 3 : 0) + (s.talk > 0.3 ? 1 : 0);
-      for (let r = 6; r < len; r += 0.5) {
-        const w = r < 9 ? 1 : 0;
-        p.dot(cx + Math.cos(a) * r - 0.5, cy + Math.sin(a) * r - 0.5, body);
-        if (w) p.dot(cx + Math.cos(a + 0.12) * r - 0.5, cy + Math.sin(a + 0.12) * r - 0.5, body);
-      }
-    }
-    for (let y = -7; y <= 7; y++) for (let x = -7; x <= 7; x++) {
-      const d = x * x + y * y;
-      if (d <= 49) p.dot(cx + x - 0.5, cy + y - 0.5, d > 36 ? dark : body);
-    }
-    const ex = Math.round(cx - 0.5) - 4, ey = Math.round(cy - 0.5) - 3;
-    drawEyes(p, ex, ey, 6, s);
-    drawMouth(p, Math.round(cx - 0.5) + 1, ey + 5, s);
-  },
-
-  // a soft round blob with ears
-  mochi(p, s) {
-    const cx = 20 + Math.round(s.x);
-    const squish = s.asleep ? 1 : Math.round((Math.sin(s.t * 3) + 1) * 0.5);
-    const body = s.body, dark = shade(body, -0.22), lite = shade(body, 0.3);
-    const w = 9 + squish, h = 8 - squish, cy = 25 + squish;
-    for (let y = -h; y <= h; y++) for (let x = -w; x <= w; x++) {
-      const d = (x * x) / (w * w) + (y * y) / (h * h);
-      if (d <= 1) p.dot(cx + x, cy + y, d > 0.8 && y > 0 ? dark : body);
-    }
-    p.rect(cx - 5, cy - h + 1, 3, 1, lite);
-    // ears
-    const perk = s.mood === 'listening' || s.mood === 'curious' ? 1 : 0;
-    p.rect(cx - 7, cy - h - 2 - perk, 3, 3 + perk, body);
-    p.rect(cx + 5, cy - h - 2 - perk, 3, 3 + perk, body);
-    drawEyes(p, cx - 4, cy - 3, 7, s);
-    drawMouth(p, cx + 1, cy + 2, s);
-  },
-};
-
-const HEART = ['.#.#.', '#####', '#####', '.###.', '..#..'];
-function spawn(kind, n = 1) {
-  for (let i = 0; i < n; i++) {
-    A.particles.push({ kind, x: 20 + A.x + (Math.random() - 0.5) * 16, y: 9 + Math.random() * 4, vy: -3 - Math.random() * 3, life: 1.4 + Math.random() * 0.6, age: 0 });
-  }
-}
-
-function drawParticles(p, dt) {
-  A.particles = A.particles.filter((q) => (q.age += dt) < q.life);
-  for (const q of A.particles) {
-    q.y += q.vy * dt;
-    const alpha = 1 - q.age / q.life;
-    if (q.kind === 'heart') {
-      ctx.globalAlpha = alpha;
-      HEART.forEach((row, yy) => [...row].forEach((c, xx) => { if (c === '#') p.dot(q.x + xx, q.y + yy, CHEEK); }));
-      ctx.globalAlpha = 1;
-    }
-  }
-  // sleeping Zs
-  if (A.asleep) {
-    const k = (A.t * 0.7) % 1;
-    ctx.globalAlpha = 1 - k;
-    const zx = 27 + Math.round(A.x) + Math.round(k * 4), zy = 13 - Math.round(k * 6);
-    p.rect(zx, zy, 3, 1, '#bdb3a5'); p.dot(zx + 1, zy + 1, '#bdb3a5'); p.rect(zx, zy + 2, 3, 1, '#bdb3a5');
-    ctx.globalAlpha = 1;
-  }
-  // thinking dots
-  if (A.mood === 'thinking' && !A.speaking) {
-    for (let i = 0; i < 3; i++) {
-      const on = Math.floor(A.t * 3) % 3 >= i;
-      p.rect(16 + i * 3 + Math.round(A.x), 11, 2, 2, on ? '#e9dfd2' : '#4a433c');
-    }
-  }
-  // listening rings
-  if (A.mood === 'listening') {
-    const lvl = 0.5 + 0.5 * Math.sin(A.t * 9);
-    for (const side of [-1, 1]) for (let r = 0; r < 2; r++) {
-      const x0 = 20 + Math.round(A.x) + side * (13 + r * 2);
-      const hgt = 2 + r * 2 + Math.round(lvl * 2);
-      ctx.globalAlpha = 0.9 - r * 0.35;
-      p.rect(x0, 23 - Math.floor(hgt / 2), 1, hgt, cfg.color);
-      ctx.globalAlpha = 1;
-    }
-  }
-}
-
-const painter = makePainter(ctx, PX);
-let last = performance.now();
-function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  A.t += dt;
-  // mood expiry
-  if (A.moodUntil && A.t > A.moodUntil) { A.mood = 'calm'; A.moodUntil = 0; }
-  // blink
-  A.blinking = A.t > A.blinkAt && A.t < A.blinkAt + 0.12;
-  if (A.t > A.blinkAt + 0.12) A.blinkAt = A.t + 2 + Math.random() * 3.5;
-  // gaze + wander while idle
-  if (!A.asleep && A.mood === 'calm' && !A.speaking && Math.random() < dt * 0.35) {
-    A.lookTX = Math.round((Math.random() - 0.5) * 2); A.lookTY = Math.random() < 0.2 ? -1 : 0;
-    if (Math.random() < 0.5) A.tx = (Math.random() - 0.5) * 8;
-  }
-  if (A.mood !== 'calm' || A.speaking) { A.lookTX = 0; A.lookTY = 0; A.tx = 0; }
-  A.lookX += (A.lookTX - A.lookX) * Math.min(1, dt * 8);
-  A.lookY += (A.lookTY - A.lookY) * Math.min(1, dt * 8);
-  A.x += Math.sign(A.tx - A.x) * Math.min(Math.abs(A.tx - A.x), dt * 4);
-  // mouth: a jittery envelope while the voice is running
-  const target = A.speaking ? 0.25 + 0.75 * Math.abs(Math.sin(A.t * 13) * Math.sin(A.t * 7.3 + 1)) : 0;
-  A.talk += (target - A.talk) * Math.min(1, dt * 18);
-  A.blush = Math.max(0, A.blush - dt * 0.6);
-  A.wave = Math.max(0, A.wave - dt);
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  (SKINS[cfg.skin] || SKINS.crab)(painter, { ...A, body: cfg.color });
-  drawParticles(painter, dt);
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
-
-function setMood(m, secs = 0) {
-  A.mood = m;
-  A.moodUntil = secs ? A.t + secs : 0;
+// Emotions are the base's EMO names (clawd.js); a timed one falls back to neutral.
+let moodTimer;
+function setMood(name, secs = 0) {
+  clearTimeout(moodTimer);
+  CH.emotion(name);
+  if (secs) moodTimer = setTimeout(() => { if (!busy && !listening && CH.current() === name) CH.emotion('neutral'); }, secs * 1000);
 }
 
 /* ------------------------------------------------------------ screen text */
@@ -337,11 +129,11 @@ function setStatus(s) { status.textContent = s || ''; }
 let idleTimer;
 function poke() {
   clearTimeout(idleTimer);
-  if (A.asleep) { A.asleep = false; setMood('surprised', 0.8); say(t.woke, { hold: 2.5 }); setStatus(''); }
+  if (CH.S.asleep) { CH.sleep(false); setMood('surprised', 1.2); say(t.woke, { hold: 2.5 }); setStatus(''); }
   idleTimer = setTimeout(() => {
     if (busy || listening) return poke();
-    setMood('sleepy', 6);
-    idleTimer = setTimeout(() => { if (!busy && !listening) { A.asleep = true; setStatus(t.sleeping); } }, 6000);
+    setMood('bored', 8);
+    idleTimer = setTimeout(() => { if (!busy && !listening) { CH.sleep(true); bubble.hidden = true; setStatus(t.sleeping); } }, 8000);
   }, 60000);
 }
 
@@ -414,7 +206,7 @@ function startListening() {
   rec.onend = () => {
     listening = false;
     $('sensor').classList.remove('on');
-    if (A.mood === 'listening') setMood('calm');
+    CH.S.listening = false;
     setStatus('');
     const text = heard.trim();
     if (text) send(text); else bubble.hidden = true;
@@ -422,7 +214,7 @@ function startListening() {
   try { rec.start(); } catch { return; }
   listening = true;
   $('sensor').classList.add('on');
-  setMood('listening');
+  CH.listen(true);
   setStatus(t.listening);
 }
 function stopListening() { if (rec && listening) rec.stop(); }
@@ -454,9 +246,9 @@ $('screen').addEventListener('pointerdown', () => {
   const now = performance.now();
   strokes = now - lastPet < 1200 ? strokes + 1 : 1;
   lastPet = now;
-  A.blush = 1;
-  spawn('heart', strokes > 2 ? 2 : 1);
-  setMood('happy', 1.6);
+  CH.pet();
+  if (strokes === 8) { CH.dance(6); setMood('laugh', 6); }
+  else if (strokes < 8) setMood(strokes > 3 ? 'love' : 'happy', 2.5);
   if (strokes === 1 || strokes % 4 === 0) {
     const line = t.petted[Math.floor(Math.random() * t.petted.length)];
     say(line, { hold: 1.8 });
@@ -465,7 +257,7 @@ $('screen').addEventListener('pointerdown', () => {
 
 /* ------------------------------------------------------------------ Claude */
 
-const MOODS = ['happy', 'curious', 'thinking', 'sad', 'surprised', 'sleepy', 'calm'];
+const MOODS = [...CH.EMOTIONS, 'dance'];
 const LANG_NAME = { 'ko-KR': 'Korean', 'en-US': 'English', 'ja-JP': 'Japanese' };
 
 function systemPrompt() {
@@ -475,7 +267,7 @@ Personality: ${cfg.persona || T[uiLang].persona0}
 
 Keep replies short — usually one or two sentences, never more than four — in plain spoken language: no markdown, lists, emoji or URLs. Reply in ${LANG_NAME[cfg.lang] || 'the user\'s language'} unless the user writes in another language.
 
-Begin every reply with exactly one mood tag chosen from [happy] [curious] [thinking] [sad] [surprised] [sleepy] [calm], then your words. The tag drives your face on the screen and is not read aloud.
+Begin every reply with exactly one mood tag in square brackets, then your words. The tag drives your painted face and body on the screen and is not read aloud. Choose from: ${MOODS.map((m) => `[${m}]`).join(' ')}. [dance] makes you dance for a few seconds — use it when there's something to celebrate or you're asked to dance.
 
 You have no tools, internet access, or memory beyond this conversation. If asked to do something you can't (set alarms, send messages, look things up live), say so plainly and briefly. Latency-sensitive; begin your visible answer immediately.`;
 }
@@ -515,7 +307,7 @@ async function send(text) {
   addLog('user', text);
 
   if (!cfg.key) {
-    setMood('sad', 2.5);
+    setMood('confused', 4);
     say(t.needKey, { hold: 7 });
     speak(t.needKey);
     mimeTalk(2500);
@@ -550,8 +342,11 @@ async function send(text) {
       raw += ev.delta.text;
       if (!moodSet) {
         const m = raw.match(/^\s*\[(\w+)\]\s*/);
-        if (m) { moodSet = true; setMood(MOODS.includes(m[1]) ? (m[1] === 'calm' ? 'calm' : m[1]) : 'calm', 8); raw = raw.slice(m[0].length); }
-        else if (raw.length > 14 || !/^\s*\[/.test(raw)) { moodSet = true; setMood('calm'); }
+        if (m) {
+          moodSet = true; raw = raw.slice(m[0].length);
+          const tag = m[1].toLowerCase();
+          if (tag === 'dance') { CH.dance(8); setMood('happy', 10); } else setMood(MOODS.includes(tag) ? tag : 'neutral', 12);
+        } else if (raw.length > 16 || !/^\s*\[/.test(raw)) { moodSet = true; setMood('neutral'); }
         else continue;
       }
       shown = raw.replace(/\[(\w+)\]\s*/g, '');
@@ -563,7 +358,7 @@ async function send(text) {
     const msg = await stream.finalMessage();
     if (msg.stop_reason === 'refusal' && !shown) {
       shown = t.errRefusal;
-      setMood('sad', 3);
+      setMood('nervous', 4);
       say(shown, { hold: 6 });
     }
     flushSpeech(true);
@@ -582,7 +377,7 @@ async function send(text) {
     else if (!Anthropic) line = t.errNet; // the SDK itself failed to load
     else line = t.errOther(err?.error?.error?.message || err?.message || String(err));
     console.error(err);
-    setMood('sad', 4);
+    setMood('sad', 5);
     say(line, { hold: 8 });
     speak(line);
   } finally {
@@ -613,37 +408,37 @@ for (const m of history) addLog(m.role, m.content);
 
 $('btn-forget').addEventListener('click', () => {
   history = []; store.del('history'); $('log').innerHTML = '';
-  setMood('surprised', 1.5); say(t.forgot, { hold: 4 });
+  setMood('dizzy', 3); say(t.forgot, { hold: 4 });
 });
 
 /* --------------------------------------------------------------- settings */
 
-const COLORS = ['#d97757', '#e0a458', '#e8d5b5', '#8fae8b', '#7fa7d9', '#b39ddb', '#e58fa8', '#d9d4cc'];
+const COLORS = ['#d97757', '#e8aa38', '#e27a92', '#7b5ca8', '#3a9c98', '#6e9f58', '#8ec3e6', '#c9b8a6'];
 const dlg = $('settings');
 
-function drawSkinThumb(name) {
-  const c = document.createElement('canvas');
-  c.width = c.height = G * 2;
-  const p = makePainter(c.getContext('2d'), 2);
-  SKINS[name](p, { t: 0, mood: 'happy', talk: 0, lookX: 0, lookY: 0, x: 0, tx: 0, blush: 0, wave: 0, body: cfg.color });
-  return c;
-}
+const HATS = ['none', 'party', 'crown', 'halo', 'wizard', 'hood', 'top', 'fedora', 'beanie', 'bow', 'flower', 'headphones', 'cat', 'band', 'sweatband', 'hard', 'masq', 'bowtie'];
+const thumbs = {};   // `${hat}|${color}` -> data URL, painted once by the scene
 
-function renderPickers() {
-  const skins = $('s-skins'); skins.innerHTML = '';
-  for (const name of Object.keys(SKINS)) {
+async function renderPickers() {
+  const box = $('s-hats'); box.innerHTML = '';
+  const buttons = HATS.map((h) => {
     const b = document.createElement('button');
-    b.type = 'button'; b.setAttribute('aria-pressed', cfg.skin === name); b.setAttribute('aria-label', name);
-    b.append(drawSkinThumb(name));
-    b.onclick = () => { cfg.skin = name; saveCfg(); renderPickers(); setMood('happy', 1.2); A.wave = 1; };
-    skins.append(b);
-  }
+    b.type = 'button'; b.setAttribute('aria-pressed', cfg.hat === h); b.setAttribute('aria-label', h); b.title = h;
+    b.onclick = () => { cfg.hat = h; saveCfg(); CH.setHat(h); setMood('proud', 2.5); renderPickers(); };
+    box.append(b);
+    return [h, b];
+  });
   const sw = $('s-colors'); sw.innerHTML = '';
   for (const col of COLORS) {
     const b = document.createElement('button');
     b.type = 'button'; b.style.background = col; b.setAttribute('aria-pressed', cfg.color === col); b.setAttribute('aria-label', col);
-    b.onclick = () => { cfg.color = col; saveCfg(); document.documentElement.style.setProperty('--accent', col); renderPickers(); };
+    b.onclick = () => { cfg.color = col; saveCfg(); CH.setColor(col); document.documentElement.style.setProperty('--accent', col); setMood('happy', 2); renderPickers(); };
     sw.append(b);
+  }
+  for (const [h, b] of buttons) {   // thumbnails come in one by one without blocking the sheet
+    const key = h + '|' + cfg.color;
+    thumbs[key] ||= await CH.thumb(h, cfg.color.toLowerCase() === '#d97757' ? null : cfg.color);
+    const img = new Image(); img.alt = ''; img.src = thumbs[key]; b.append(img);
   }
 }
 
@@ -682,5 +477,7 @@ function applyName() {
 document.documentElement.style.setProperty('--accent', cfg.color);
 applyName();
 $('hint').textContent = SR ? t.hintMic : t.hintNoMic;
-setTimeout(() => { setMood('happy', 2.5); A.wave = 1.6; say(t.hello(cfg.name), { hold: 6 }); }, 400);
+CH.setHat(cfg.hat); CH.setColor(cfg.color); CH.start();
+setInterval(() => $('screen').classList.toggle('night', CH.isNight()), 1000);
+CH.wait().then(() => setTimeout(() => { setMood('excited', 3); say(t.hello(cfg.name), { hold: 6 }); }, 500));
 poke();

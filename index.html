@@ -6,8 +6,12 @@
 <title>Claude Charm</title>
 <meta name="description" content="A pocket AI companion you tap to talk to — an unofficial, Claude-flavoured take on the Muse Charm idea.">
 <meta name="theme-color" content="#1b1917">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3' y='4' width='10' height='8' fill='%23d97757'/%3E%3Crect x='5' y='6' width='2' height='2' fill='%23222'/%3E%3Crect x='9' y='6' width='2' height='2' fill='%23222'/%3E%3Crect x='1' y='7' width='2' height='2' fill='%23d97757'/%3E%3Crect x='13' y='7' width='2' height='2' fill='%23d97757'/%3E%3Crect x='4' y='12' width='1' height='2' fill='%23d97757'/%3E%3Crect x='6' y='12' width='1' height='2' fill='%23d97757'/%3E%3Crect x='9' y='12' width='1' height='2' fill='%23d97757'/%3E%3Crect x='11' y='12' width='1' height='2' fill='%23d97757'/%3E%3C/svg%3E">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Permanent+Marker&display=swap">
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 <main class="stage">
@@ -23,7 +27,7 @@
     <div class="ring" aria-hidden="true"></div>
     <div class="charm" id="charm">
       <div class="screen" id="screen">
-        <canvas id="face" width="240" height="240" aria-label="companion"></canvas>
+        <canvas id="out" width="560" height="560" aria-label="Clawd"></canvas>
         <div class="bubble" id="bubble" hidden></div>
         <div class="status" id="status"></div>
       </div>
@@ -62,8 +66,8 @@
       <legend data-i18n="companion">친구</legend>
       <label><span data-i18n="name">이름</span><input id="s-name" maxlength="16"></label>
       <div class="field">
-        <span data-i18n="avatar">모습</span>
-        <div class="skins" id="s-skins"></div>
+        <span data-i18n="avatar">모자</span>
+        <div class="skins" id="s-hats"></div>
       </div>
       <div class="field">
         <span data-i18n="color">색</span>
@@ -102,6 +106,17 @@
   </form>
 </dialog>
 
+<!-- the painted screen: p5.js + p5.brush and the vendored Claude Animation Base (MIT) -->
+<script>
+  // Screen resolution: ?res= wins, then what this device settled on last time (see charm-scene.js), then 560.
+  const RES = (() => { let r = +new URLSearchParams(location.search).get('res'); if (!r) { try { r = +localStorage.getItem('charm.res'); } catch {} } return Math.max(320, Math.min(800, r || 560)); })();
+  const PROJECT = { w: RES, h: RES, bpm: 100, offset: 0, duration: 1e9 };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/p5@2.3.3/lib/p5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/p5.brush.js"></script>
+<script src="vendor/claude-animation-base/core.js"></script>
+<script src="vendor/claude-animation-base/clawd.js"></script>
+<script src="charm-scene.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
