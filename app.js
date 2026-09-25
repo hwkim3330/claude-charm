@@ -71,7 +71,7 @@ const T = {
     noWebGPU: '이 브라우저는 WebGPU가 없어서 무료 AI를 못 돌려요. AI 없이도 대화는 돼요.',
     offer: `API 키가 없어도 돼요 — 무료 AI를 켤까요? (약 ${LOCAL_MODEL.sizeMB}MB)`, offerYes: '켜기', offerNo: '나중에',
     persona0: '호기심 많고 다정하며 조금 장난스럽다. 주인을 잘 챙기고, 작은 일에도 기뻐한다.',
-    foot: '비공식 팬 프로젝트 · Anthropic, Meta 와 무관합니다 · Meta <b>Muse Charm</b> 에서 영감을 받았습니다<br>대화는 브라우저에서 직접 Claude API 로 갑니다 · <a href="https://github.com/hwkim3330/claude-charm">GitHub</a>',
+    foot: '비공식 팬 프로젝트 · Anthropic, Meta 와 무관합니다 · Meta <b>Muse Charm</b> 에서 영감을 받았습니다<br>API 키를 넣으면 대화는 브라우저에서 직접 Claude API 로 갑니다 · <a href="https://github.com/hwkim3330/claude-charm">GitHub</a>',
   },
   en: {
     settings: 'Settings', log: 'Conversation', forget: 'Forget everything', companion: 'Companion', name: 'Name', avatar: 'Hat', color: 'Colour',
@@ -104,7 +104,7 @@ const T = {
     noWebGPU: "This browser has no WebGPU, so the free AI can't run here. Chatting still works without AI.",
     offer: `No API key needed — turn on the free AI? (~${LOCAL_MODEL.sizeMB}MB)`, offerYes: 'Turn on', offerNo: 'Later',
     persona0: 'Curious, warm and a little playful. Looks out for their owner and delights in small things.',
-    foot: 'Unofficial fan project · not affiliated with Anthropic or Meta · inspired by Meta\'s <b>Muse Charm</b><br>Chats go straight from your browser to the Claude API · <a href="https://github.com/hwkim3330/claude-charm">GitHub</a>',
+    foot: 'Unofficial fan project · not affiliated with Anthropic or Meta · inspired by Meta\'s <b>Muse Charm</b><br>With a key, chats go straight from your browser to the Claude API · <a href="https://github.com/hwkim3330/claude-charm">GitHub</a>',
   },
 };
 const t = T[uiLang];

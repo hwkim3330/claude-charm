@@ -45,18 +45,20 @@ export async function skills(text, lang, ctx) {
   const now = new Date();
 
   // timer: "3분 타이머", "10초 뒤에 알려줘", "timer 5 minutes"
-  let m = s.match(/(\d+(?:\.\d+)?)\s*(초|분|시간|sec(?:ond)?s?|min(?:ute)?s?|hours?|h\b|m\b|s\b)/i);
-  if (m && /(타이머|알려|깨워|뒤에|후에|timer|remind|wake|later|in \d)/i.test(s)) {
-    const n = parseFloat(m[1]), u = m[2].toLowerCase();
-    const sec = /^(시간|h|hour)/.test(u) ? n * 3600 : /^(분|m|min)/.test(u) ? n * 60 : n;
+  // "1시간 30분" / "1 hour 30 minutes": every number-unit pair counts, not just the first
+  const parts = [...s.matchAll(/(\d+(?:\.\d+)?)\s*(초|분|시간|sec(?:ond)?s?|min(?:ute)?s?|hours?|h\b|m\b|s\b)/gi)];
+  if (parts.length && /(타이머|알려|깨워|뒤에|후에|timer|remind|wake|later|in \d)/i.test(s)) {
+    let sec = 0;
+    for (const [, n, u] of parts) sec += /^(시간|h)/i.test(u) ? n * 3600 : /^(분|m)/i.test(u) ? n * 60 : +n;
     if (sec > 0 && sec <= 24 * 3600) {
       ctx.timer(sec);
-      const say = K ? `${m[1]}${m[2]} 타이머 시작! 끝나면 춤추면서 알려줄게.` : `Timer set for ${m[1]} ${m[2]}. I'll dance when it's done!`;
+      const span = parts.map((p) => K ? p[1] + p[2] : `${p[1]} ${p[2]}`).join(' ');
+      const say = K ? `${span} 타이머 시작! 끝나면 춤추면서 알려줄게.` : `Timer set for ${span}. I'll dance when it's done!`;
       return { text: say, mood: 'determined' };
     }
   }
   // time / date
-  if (/(몇\s*시|지금 시간|what time|the time)/i.test(s)) {
+  if (/(몇\s*시(?!간)|지금 시간|what time|the time)/i.test(s)) {
     const h = now.getHours(), mi = now.getMinutes();
     const t = K ? `지금은 ${h < 6 ? '새벽' : h < 12 ? '오전' : h < 18 ? '오후' : '밤'} ${h % 12 || 12}시 ${mi ? mi + '분' : '정각'}이야.` : `It's ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.`;
     return { text: t, mood: 'neutral' };
@@ -82,10 +84,12 @@ export async function skills(text, lang, ctx) {
   }
   // dice / coin / rock-paper-scissors
   if (/(주사위|dice|roll a die)/i.test(s)) { const d = 1 + Math.floor(Math.random() * 6); return { text: K ? `데구르르… ${d}!` : `Rolling… ${d}!`, mood: d === 6 ? 'starstruck' : 'excited' }; }
-  if (/(동전|coin|flip)/i.test(s)) { const h = Math.random() < 0.5; return { text: K ? (h ? '앞면!' : '뒷면!') : (h ? 'Heads!' : 'Tails!'), mood: 'excited' }; }
+  if (/(동전|coin|heads or tails)/i.test(s)) { const h = Math.random() < 0.5; return { text: K ? (h ? '앞면!' : '뒷면!') : (h ? 'Heads!' : 'Tails!'), mood: 'excited' }; }
   const RPS = K ? ['가위', '바위', '보'] : ['rock', 'paper', 'scissors'];
-  const mine = RPS.findIndex((w) => new RegExp(`(^|\\s)${w}(\\s|!|$)`, 'i').test(s));
-  if (/(가위바위보|rock.?paper.?scissors)/i.test(s) && mine < 0) return { text: K ? '좋아! 가위, 바위, 보 중에 하나 말해!' : 'Okay! Say rock, paper or scissors!', mood: 'playful' };
+  // look for the move outside the game's own name: "rock paper scissors" starts with "rock" but isn't a throw
+  const GAME = /(가위바위보|rock.?paper.?scissors)/i, rest = s.replace(new RegExp(GAME.source, 'gi'), ' ');
+  const mine = RPS.findIndex((w) => new RegExp(`(^|\\s)${w}(\\s|!|$)`, 'i').test(rest));
+  if (GAME.test(s) && mine < 0) return { text: K ? '좋아! 가위, 바위, 보 중에 하나 말해!' : 'Okay! Say rock, paper or scissors!', mood: 'playful' };
   if (mine >= 0 && s.length < 12) {
     const me = Math.floor(Math.random() * 3);
     // ko order: 가위(0) 바위(1) 보(2); en order: rock(0) paper(1) scissors(2). "beats": x beats y
@@ -141,8 +145,10 @@ export function offlineReply(text, lang, name) {
   const R = (mood, ...lines) => ({ text: pick(lines), mood });
 
   // learning your name
-  let m = s.match(/(?:내 이름은|나는|난)\s*([가-힣A-Za-z]{1,10}?)(?:이?야|이?라고 해|이에요|예요|입니다|이?라고 불러)/) || s.match(/(?:my name is|i'm|i am|call me)\s+([A-Za-z]{2,12})/i);
-  if (m && !/(배고|졸려|슬퍼|좋아|괜찮|피곤|행복)/.test(m[1])) {
+  let m = s.match(/(?:내 이름은|나는|난)\s*([가-힣A-Za-z]{1,10}?)(?:이?야|이?라고 해|이에요|예요|입니다|이?라고 불러)/) || s.match(/(?:my name is|call me)\s+([A-Za-z]{2,12})/i)
+    || s.match(/\b[Ii](?:'m| am)\s+([A-Z][a-z]{1,11})\b/);   // "I'm Kim" yes, "I'm tired" no: a name is capitalised
+  // "나는 학생이야" / "I'm Fine" describe you, they don't name you
+  if (m && !/(배고|졸려|슬퍼|좋아|괜찮|피곤|행복|학생|직장인|회사원|사람|개발자|선생|의사|엄마|아빠|남자|여자|어른|아이|혼자|여기|진짜|정말|완전|^(Fine|Good|Great|Okay|Ok|Sorry|Happy|Sad|Tired|Hungry|Bored|Here|Back|Home|So|Not|Just|Really|Very|Still|Done|Busy|Sick)$)/i.test(m[1])) {
     remember('userName', m[1]);
     return R('happy', K ? `${m[1]}! 좋은 이름이다. 이제 안 까먹을게.` : `${m[1]}! Lovely name. I'll remember it.`);
   }
